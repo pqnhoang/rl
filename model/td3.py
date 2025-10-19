@@ -1,13 +1,12 @@
 import os
 import torch
 import torch.nn as nn
-import torch.functional as F
+import torch.nn.functional as nn_functional
 import torch.optim as optim
 from torch.distributions import Normal
 from model.model import ActorNet, CriticNet
 from model.buffer import ReplayBuffer
 import numpy as np
-import logging
 
 
 
@@ -55,7 +54,7 @@ class Agent:
     mu_prime = mu + torch.tensor(np.random.normal(0, self.noise, size=self.n_actions), dtype=torch.float32).to(self.actor.device)
     mu_prime = mu_prime.clip(self.min_action, self.max_action)
     self.time_step += 1
-    return mu_prime.detach().cpu().numpy()[0]
+    return mu_prime.detach().cpu().numpy()
   
   def remember(self,state,action,reward,next_state,done):
     self.memory.store_transition(state, action, reward, next_state, done)
@@ -66,9 +65,8 @@ class Agent:
       return
     
     state, action, reward, next_state, done = self.memory.sample_buffer(self.batch_size)
-    
     reward = torch.tensor(reward, dtype=torch.float32).to(self.actor.device)
-    done = torch.tensor(done, dtype=torch.float32).to(self.actor.device)
+    done = torch.tensor(done, dtype=torch.bool).to(self.actor.device)
     next_state = torch.tensor(next_state, dtype=torch.float32).to(self.actor.device)
     state = torch.tensor(state, dtype=torch.float32).to(self.actor.device)
     action = torch.tensor(action, dtype=torch.float32).to(self.actor.device)
@@ -76,7 +74,7 @@ class Agent:
     
     target_actions = self.actor_target.forward(next_state)
     target_actions = target_actions + torch.clamp(torch.tensor(np.random.normal(scale=0.2)), -0.5, 0.5)
-    target_actions = torch.clamp(target_actions, self.min_action[0], self.max_action[0])
+    target_actions = torch.clamp(target_actions, self.min_action, self.max_action)
     
     next_q1 = self.critic_1_target.forward(next_state, target_actions)
     next_q2 = self.critic_2_target.forward(next_state, target_actions)
@@ -99,8 +97,8 @@ class Agent:
     target = reward + self.gamma * next_critic_value
     target = target.view(-1)
     
-    q1_loss = F.mse_loss(q1, target)
-    q2_loss = F.mse_loss(q2, target)
+    q1_loss = nn_functional.mse_loss(q1, target)
+    q2_loss = nn_functional.mse_loss(q2, target)
     critic_loss = q1_loss + q2_loss
 
     critic_loss.backward()
@@ -126,12 +124,12 @@ class Agent:
       tau = self.tau
       
       
-    actor_params = self.actor.parameters()
-    critic_1_params = self.critic_1.parameters()
-    critic_2_params = self.critic_2.parameters()
-    target_actor_params = self.actor_target.parameters()
-    target_critic_1_params = self.critic_1_target.parameters()
-    target_critic_2_params = self.critic_2_target.parameters()
+    actor_params = self.actor.named_parameters()
+    critic_1_params = self.critic_1.named_parameters()
+    critic_2_params = self.critic_2.named_parameters()
+    target_actor_params = self.actor_target.named_parameters()
+    target_critic_1_params = self.critic_1_target.named_parameters()
+    target_critic_2_params = self.critic_2_target.named_parameters()
 
     actor_state_dict = dict(actor_params)
     critic_1_state_dict = dict(critic_1_params)
@@ -152,13 +150,6 @@ class Agent:
     self.actor_target.load_state_dict(actor_state_dict)
     self.critic_1_target.load_state_dict(critic_1_state_dict)
     self.critic_2_target.load_state_dict(critic_2_state_dict)
-    
-    logging.info('--------------------------------')
-    logging.info('Actor target network parameters updated')
-    logging.info('Critic 1 target network parameters updated')
-    logging.info('Critic 2 target network parameters updated')
-    logging.info('--------------------------------')
-    
   def save_models(self):
     self.actor.save_checkpoint()
     self.critic_1.save_checkpoint()
@@ -166,17 +157,29 @@ class Agent:
     self.actor_target.save_checkpoint()
     self.critic_1_target.save_checkpoint()
     self.critic_2_target.save_checkpoint()
-    logging.info('Models saved successfully')
+    print('Models saved successfully')
     
   def load_models(self):
-    try:  
-      self.actor.load_checkpoint()
-      self.critic_1.load_checkpoint()
-      self.critic_2.load_checkpoint()
-      self.actor_target.load_checkpoint()
-      self.critic_1_target.load_checkpoint()
-      self.critic_2_target.load_checkpoint()
-      logging.info('Models loaded successfully')
-    except Exception as e:
-      logging.error(f'Error loading models: {e}')
+    success_count = 0
+    total_models = 6
+    
+    if self.actor.load_checkpoint():
+      success_count += 1
+    if self.critic_1.load_checkpoint():
+      success_count += 1
+    if self.critic_2.load_checkpoint():
+      success_count += 1
+    if self.actor_target.load_checkpoint():
+      success_count += 1
+    if self.critic_1_target.load_checkpoint():
+      success_count += 1
+    if self.critic_2_target.load_checkpoint():
+      success_count += 1
+    
+    if success_count == total_models:
+      print('All models loaded successfully')
+    elif success_count > 0:
+      print(f'Warning: Only {success_count}/{total_models} models loaded successfully')
+    else:
+      print('Error: No models could be loaded')
     

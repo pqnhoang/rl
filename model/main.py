@@ -5,17 +5,37 @@ import torch.functional as F
 import torch.optim as optim
 from torch.distributions import Normal
 from torch.utils.tensorboard import SummaryWriter
+import robosuite as suite
+from robosuite.wrappers import GymWrapper
+from robosuite.controllers import load_controller_config
 import time
 
 
-from model.env import make_env
 from model.model import ActorNet, CriticNet
 from model.buffer import ReplayBuffer
 from model.td3 import Agent
 
 if __name__ == "__main__":
-  env = make_env()
-  env = env()
+  if not os.path.exists('tmp/td3'):
+    os.makedirs('tmp/td3')
+  
+  env_name = "Door"
+  
+  config = load_controller_config(default_controller="JOINT_VELOCITY")
+  env = suite.make(
+    env_name=env_name,
+    robots=["Panda"],
+    controller_configs=config,
+    has_renderer=False,
+    use_camera_obs=False,
+    horizon=300,
+    reward_shaping=True,
+    control_freq=20,
+    )
+  env = GymWrapper(env)
+  
+  
+  
   actor_learning_rate = 0.001
   critic_learning_rate = 0.001
   batch_size = 64
@@ -24,7 +44,7 @@ if __name__ == "__main__":
   
   agent = Agent(alpha=actor_learning_rate,
                 beta=critic_learning_rate,
-                state_dim=env.observation_space.shape[0],
+                state_dim=env.observation_space.shape,
                 tau=0.005,
                 env=env,
                 action_dim=env.action_space.shape[0],
@@ -36,6 +56,8 @@ if __name__ == "__main__":
   n_games = 10000
   best_score = 0
   episode_identifier = f"0_{time.time()} actor_learning_rate_{actor_learning_rate} critic_learning_rate_{critic_learning_rate} batch_size_{batch_size} layer_1_size_{layer_1_size} layer_2_size_{layer_2_size}"
+  
+  agent.load_models()
   
   for i in range(n_games):
     observation = env.reset()
