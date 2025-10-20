@@ -35,7 +35,6 @@ if __name__ == "__main__":
   env = GymWrapper(env)
   
   
-  
   actor_learning_rate = 0.001
   critic_learning_rate = 0.001
   batch_size = 128
@@ -44,18 +43,18 @@ if __name__ == "__main__":
   
   agent = Agent(alpha=actor_learning_rate,
                 beta=critic_learning_rate,
-                state_dim=env.observation_space.shape,
                 tau=0.005,
+                input_dims=env.observation_space.shape,
                 env=env,
-                action_dim=env.action_space.shape[0],
-                fc1_dim=layer_1_size,
-                fc2_dim=layer_2_size,
+                n_actions=env.action_space.shape[0],
+                layer1_size=layer_1_size,
+                layer2_size=layer_2_size,
                 batch_size=batch_size)
   
-  writer = SummaryWriter(log_dir='runs/td3')
+  writer = SummaryWriter(log_dir='runs/logs')
   n_games = 10000
   best_score = 0
-  episode_identifier = f"0_{time.time()} actor_learning_rate_{actor_learning_rate} critic_learning_rate_{critic_learning_rate} batch_size_{batch_size} layer_1_size_{layer_1_size} layer_2_size_{layer_2_size}"
+  episode_identifier = f"0 - actor_learning_rate = {actor_learning_rate} critic_learning_rate = {critic_learning_rate} batch_size = {batch_size} layer_1_size ={layer_1_size} layer_2_size = {layer_2_size}"
   
   agent.load_models()
   
@@ -63,13 +62,14 @@ if __name__ == "__main__":
     observation = env.reset()
     done = False
     score = 0
+    
     while not done:
       action = agent.choose_action(observation)
-      observation_, reward, done, info = env.step(action)
+      next_observation, reward, done, info = env.step(action)
       score += reward
-      agent.remember(observation, action, reward, observation_, done)
+      agent.remember(observation, action, reward, next_observation, done)
       agent.learn()
-    writer.add_scalar(f'Score/{episode_identifier}', score, i)
+    writer.add_scalar(f'Score/{episode_identifier}', score, global_step = i)
     
     if (i%10 == 0):
       agent.save_models()
