@@ -34,8 +34,13 @@ class CriticNet(nn.Module):
     print(f"Checkpoint saved to {self.checkpoint_file}")
   
   def load_checkpoint(self):
-    self.load_state_dict(torch.load(self.checkpoint_file))
-    print(f"Checkpoint loaded from {self.checkpoint_file}")
+    if os.path.exists(self.checkpoint_file):
+      self.load_state_dict(torch.load(self.checkpoint_file))
+      print(f"Checkpoint loaded from {self.checkpoint_file}")
+      return True
+    else:
+      print(f"No checkpoint found at {self.checkpoint_file}")
+      return False
 
 
 class ActorNet(nn.Module):
@@ -66,5 +71,10 @@ class ActorNet(nn.Module):
     print(f"Checkpoint saved to {self.checkpoint_file}")
   
   def load_checkpoint(self):
-    self.load_state_dict(torch.load(self.checkpoint_file))
-    print(f"Checkpoint loaded from {self.checkpoint_file}")
+    if os.path.exists(self.checkpoint_file):
+      self.load_state_dict(torch.load(self.checkpoint_file))
+      print(f"Checkpoint loaded from {self.checkpoint_file}")
+      return True
+    else:
+      print(f"No checkpoint found at {self.checkpoint_file}")
+      return False

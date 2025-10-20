@@ -15,8 +15,8 @@ class Agent:
                                  action_dim = 2, max_size=1000000, fc1_dim=256, fc2_dim=128, batch_size=100, lr=10e-3, noise=0.1):
     self.gamma = gamma
     self.tau = tau
-    self.max_action = env.action_space.high[0]
-    self.min_action = env.action_space.low[0]
+    self.max_action = env.action_space.high
+    self.min_action = env.action_space.low
     self.memory = ReplayBuffer(max_size, state_dim, action_dim)
     self.batch_size = batch_size
     self.learn_step_cntr = 0
@@ -52,7 +52,7 @@ class Agent:
       mu = self.actor.forward(state).to(self.actor.device)
     
     mu_prime = mu + torch.tensor(np.random.normal(0, self.noise, size=self.n_actions), dtype=torch.float32).to(self.actor.device)
-    mu_prime = mu_prime.clip(self.min_action, self.max_action)
+    mu_prime = mu_prime.clip(self.min_action[0], self.max_action[0])
     self.time_step += 1
     return mu_prime.detach().cpu().numpy()
   
@@ -61,20 +61,21 @@ class Agent:
     
   
   def learn(self):
-    if self.memory.mem_cntr < self.batch_size:
+    if self.memory.mem_cntr < self.batch_size * 10:
       return
     
     state, action, reward, next_state, done = self.memory.sample_buffer(self.batch_size)
-    reward = torch.tensor(reward, dtype=torch.float32).to(self.actor.device)
-    done = torch.tensor(done, dtype=torch.bool).to(self.actor.device)
-    next_state = torch.tensor(next_state, dtype=torch.float32).to(self.actor.device)
-    state = torch.tensor(state, dtype=torch.float32).to(self.actor.device)
-    action = torch.tensor(action, dtype=torch.float32).to(self.actor.device)
+    
+    reward = torch.tensor(reward, dtype=torch.float32).to(self.critic_1.device)
+    done = torch.tensor(done, dtype=torch.bool).to(self.critic_1.device)
+    next_state = torch.tensor(next_state, dtype=torch.float32).to(self.critic_1.device)
+    state = torch.tensor(state, dtype=torch.float32).to(self.critic_1.device)
+    action = torch.tensor(action, dtype=torch.float32).to(self.critic_1.device)
     
     
     target_actions = self.actor_target.forward(next_state)
-    target_actions = target_actions + torch.clamp(torch.tensor(np.random.normal(scale=0.2)), -0.5, 0.5)
-    target_actions = torch.clamp(target_actions, self.min_action, self.max_action)
+    target_actions = target_actions + torch.clamp(torch.tensor(np.random.normal(scale=0.2)), min= -0.5, max= 0.5)
+    target_actions = torch.clamp(target_actions, self.min_action[0], self.max_action[0])
     
     next_q1 = self.critic_1_target.forward(next_state, target_actions)
     next_q2 = self.critic_2_target.forward(next_state, target_actions)
@@ -84,10 +85,10 @@ class Agent:
     
     next_q1[done] = 0.0
     next_q2[done] = 0.0
+    
     next_q1 = next_q1.view(-1)
     next_q2 = next_q2.view(-1)
     
-    target_q = reward + self.gamma * torch.min(next_q1, next_q2)
     
     q1 = self.critic_1.forward(state, action)
     q2 = self.critic_2.forward(state, action)
@@ -95,13 +96,14 @@ class Agent:
     next_critic_value = torch.min(next_q1, next_q2)
     
     target = reward + self.gamma * next_critic_value
-    target = target.view(-1)
+    target = target.view(self.batch_size, -1)
     
     q1_loss = nn_functional.mse_loss(q1, target)
     q2_loss = nn_functional.mse_loss(q2, target)
+    
     critic_loss = q1_loss + q2_loss
-
     critic_loss.backward()
+    
     self.critic_1.optimizer.step()
     self.critic_2.optimizer.step()
     
@@ -114,8 +116,8 @@ class Agent:
     actor_q1_loss = self.critic_1.forward(state, self.actor.forward(state))
     actor_loss = -torch.mean(actor_q1_loss)
     actor_loss.backward()
-    self.actor.optimizer.step()
     
+    self.actor.optimizer.step()
     self.update_network_parameters()
     
     
@@ -181,5 +183,5 @@ class Agent:
     elif success_count > 0:
       print(f'Warning: Only {success_count}/{total_models} models loaded successfully')
     else:
-      print('Error: No models could be loaded')
+      print('No existing models found - starting fresh')
     

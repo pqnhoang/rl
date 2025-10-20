@@ -38,7 +38,7 @@ if __name__ == "__main__":
   
   actor_learning_rate = 0.001
   critic_learning_rate = 0.001
-  batch_size = 64
+  batch_size = 128
   layer_1_size = 256
   layer_2_size = 128
   
@@ -71,7 +71,7 @@ if __name__ == "__main__":
       agent.learn()
     writer.add_scalar(f'Score/{episode_identifier}', score, i)
     
-    if (i%10):
+    if (i%10 == 0):
       agent.save_models()
     
     print(f'Episode {i} Score {score}')
